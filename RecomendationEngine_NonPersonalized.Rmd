@@ -1,0 +1,167 @@
+Recommendation Systems
+
+Building a Non Personalized Recommendation Engine
+
+Author: Juan D'Alessandro
+
+========================================================
+
+# Initialization
+
+Import libraries
+
+```{r}
+# Used for movie ratings visualization
+library(Amelia)
+# Exercises 1 to 5 should not need new libraries
+# See functions: 
+# - sort
+# - apply
+# - colMeans
+# - subset
+# Used for Movielens analysis
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(gridExtra)
+```
+
+Load the critics dataset from Movielens
+
+```{r}
+# Read the dataset
+critics = read.csv("critics.csv")
+str(critics)
+# Great visualization, user - rated movies matrix
+movie_ratings=critics[2:length(critics)]
+str(movie_ratings)
+missmap(movie_ratings, main = "Missing values vs observed")
+```
+
+#Before starting just a quick comment regarding non-personalized recomendation engines. We will work with opinions of the majority of users assuming our client is like the majority. This technique is widely used when we do not have information about the user (this is not the case). All users will get the same output with this engine.
+
+# 1) Top 5 Movies, by rating mean
+Calculate mean rating for each movie, ordered with the highest rating listed first, and plot the top 5.
+
+```{r fig.width=7, fig.height=6}
+col_mean <- colMeans(movie_ratings, na.rm = T) # movies are listed in columns so calling this function we will get the average rating of all the users that watched the movie.
+names(col_mean) <- colnames(movie_ratings)
+top5 <- sort(col_mean, decreasing=T) [1:5] # we sort them starting by the highest and just keep the first 5 of the list
+top5 <- as.data.frame(top5) # for a better observation we include the names of the movies and tipify it as a table.
+top5
+```
+
+# 2) Top 5 Movies, by rating distribution
+Calculate the percentage of ratings for each movie that are 4 stars or higher. Order with the highest percentage first, and plot the top 5 movies with more high ratings distribution.
+
+```{r fig.width=7, fig.height=6}
+high_rating_dist <- function(x){
+  sum(x>=4, na.rm=T) / sum(x>=0, na.rm=T)
+} # in this thread we have to get the number of high ratings and get their percentage of the total amount of ratings of that movie. This function will do that.
+high_rating <- sapply(movie_ratings, high_rating_dist) # we apply the function to all the movies
+names(high_rating) <- colnames(movie_ratings) 
+high_5 <- sort(high_rating, decreasing=T)[1:5] # as on the previous question we sort by the highest and select just the first 5. 
+high_5 <- as.data.frame(high_5)
+high_5
+```
+
+# 3) Top 5 Movies, by quantity of ratings
+
+we creat a function to count the number of views of the movie (assuming all views are rated). This is a useful way of identifying the trending movies, those users are watching on a determined period of time. The more a movie is viewed the higher its popularity.
+
+```{r fig.width=7, fig.height=6}
+count_ratings <-sapply(movie_ratings, function(y) sum(length(which(!is.na(y))))) #first we count the number of ratings with this simple function
+count_ratings_top5 <- sort(count_ratings, decreasing=T)[1:5] #as on previous questions, we want to focus on the top ones so we sort the array and filter the first 5.
+count_ratings_top5 <- as.data.frame(count_ratings_top5)
+count_ratings_top5
+```
+
+# 4) People who watched Star Wars IV also watched ...
+
+```{r fig.width=7, fig.height=6}
+# People also liked typical non-personalized recomendation.
+# we will use the aproach (x+y)/y where
+# x = number of rates of SWIV (to industrialize it we can leave it as an imput to the function. not part of this analysis)
+# y = number of rates of other movies also viewed with SWIV
+q4 <- movie_ratings[!is.na(movie_ratings$Star.Wars.IV...A.New.Hope),] # we will just consider those users that watched StarWars a new hope.
+sumSWIV <- sum(length(which(!is.na(movie_ratings$Star.Wars.IV...A.New.Hope)))) # total amount of views of our x movie SWIV.
+also_watched <- sapply(q4[,2:20],function(y) sum(length(which(!is.na(y))))/sumSWIV) # we count the number of appearence of other movies with SWIV
+also_watched <- sort(also_watched, decreasing = T)[1:5] # finally, we keep the first five of a sorted (decreasing order) table
+also_watched <- as.data.frame(also_watched)
+also_watched
+```
+As we can see, this method has a downturn that is not weighting the movies by the rate. For example, most of the users who watched Total.Recall rated as 1 or 2 (avg is 1.2). They didnt like it at all.
+
+# 5) People who liked Babe also liked ...
+
+```{r fig.width=7, fig.height=6}
+liked_babe <- dplyr::filter(movie_ratings, Babe > 3) #we will just keep those users that liked the movie, they rate is higher than 3.
+col_mean_babe <- colMeans(liked_babe, na.rm = T) #secondly we get the average rate for other movies (just considering those that watched and rated Babe as 4 or 5)
+names(col_mean_babe) <- colnames(liked_babe)
+col_mean_babe <- col_mean_babe[-20]
+top5_babe <- sort(col_mean_babe, decreasing=T) [1:5] # finally, we keep the first 5 observations, those best rated. 
+top5_babe <- as.data.frame(top5_babe)
+top5_babe
+```
+As we can see, this method has a downturn that is not weighting the movies by the amount of views. For example PulpFiction was watched by only one person with a high rate.
+
+
+# 6) MovieLens
+Explore the movielens 1M dataset and share your analysis with the class. You can find MovieLens' dataset here: http://files.grouplens.org/datasets/movielens/ml-1m-README.html
+
+*automatic downlod of the zipped and seperated dataset via permalink*
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+temp <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-1m.zip",temp, mode="wb")
+movies <- read.delim(unzip(temp, "ml-1m/movies.dat"),fileEncoding="UTF-8")
+colnames(movies)<-"col1" #renaming - so I can adress this column easily for data cleaning
+ratings <- read.delim(unzip(temp, "ml-1m/ratings.dat"),fileEncoding="UTF-8")
+colnames(ratings)<-"col1"
+users <- read.delim(unzip(temp, "ml-1m/users.dat"),fileEncoding="UTF-8")
+colnames(users)<-"col1"
+unlink(temp)
+```
+
+*data cleaning and merging -> output: readable format that can be queried*
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#upload movies
+movies <- movies %>% 
+  separate(., col = "col1", into = c("MovieID", "Movie", "Genre"), sep = "\\::") %>% # we split the columns
+  separate(., col = Movie, into = c("Movie","Year"), sep = "\\(") #and another split of a splitted column
+
+movies$Year <- gsub("\\)", "", movies$Year) %>% as.integer(movies$Year)
+movies$MovieID<-as.integer(movies$MovieID)
+
+#import ratings
+ratings<-separate(ratings, col = "col1", into = c("UserID","MovieID","Rating","Timestamp"), sep = "\\::")
+
+ratings$MovieID<-as.integer(ratings$MovieID)
+ratings$UserID<-as.integer(ratings$UserID)
+ratings$Rating<-as.integer(ratings$Rating)
+ratings$Timestamp<-NULL
+
+#import users
+users<-separate(users, col = "col1", into = c("UserID","Gender","Age","Occupation","Zip-code"), sep = "\\::")
+
+users$UserID<-as.integer(users$UserID)
+users$Gender<-as.factor(users$Gender)
+users$Age<-as.integer(users$Age)
+users$Occupation<-as.character(users$Occupation)
+users$`Zip-code`<-as.integer(users$`Zip-code`)
+
+#merge tables via 2-step full inner join (based on User_ and Movie_ID)
+df_movielens<-full_join(full_join(movies,ratings),users)
+df_movielens$count<-1
+```
+
+
+```{r}
+summary(df_movielens)
+```
+```{r}
+ranking <- dplyr::group_by(df_movielens, Movie) %>% summarise(avg = mean(Rating))
+most_viewed <- count(df_movielens, 'Movie')
+library(plyr)
+
+```
+

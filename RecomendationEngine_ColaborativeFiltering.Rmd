@@ -1,0 +1,119 @@
+Recommendation Systems
+
+Building a Collaborative Filtering Engine
+
+Author: Juan D'Alessandro
+
+========================================================
+
+# Initialization
+
+Import libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(gridExtra)
+library(Amelia)
+library(corrplot)
+library(gridExtra)
+```
+
+Load the critics dataset.
+
+```{r}
+critics = read.csv("critics.csv")
+movie_ratings=critics[2:length(critics)]
+
+df <- data.frame(t(movie_ratings))
+colnames(df) <- critics[,1]
+rownames(df) <- colnames(movie_ratings)
+
+```
+
+# 1) Pearson correlation coefficient 
+Calculate the Pearson correlation coefficient between Victoria and Nuria
+
+For this, we will use the cor function of the stats package. This function compares columns so we first transpose the critics dataframe to have the users as features (columns) and compare any corelation among them.
+
+```{r fig.width=7, fig.height=6}
+cor(df$Nuria,df$Victoria, use = 'pairwise.complete.obs', method = 'pearson')
+```
+
+# 2) Compare two movie critics
+Using the calculated Pearson correlation in the previous section we compare and show the movie ratings for Victoria and Nuria on a scatter plot. How is this compared with the same ratings of Maria and Nerea on a scatter plot? What about Chris and Jim?
+
+```{r}
+
+g1 <- ggplot(data=df, mapping = aes(x=Nuria, y=Victoria, color = abs(Nuria-Victoria)<2)) + 
+  geom_point()
+
+g1 + annotate("text", x= c(1,2,2,2,3,3,5), y=c(3.2,1.2,2.2,4.8,3.2,4.2,3.8), label=c("PulpFiction","Babe","GroundhogDay","SilenceLamb","IndependenceDay",'SW.NewHope','SW.ReturnJedi'), color="orange", size=3,fontface="bold")
+
+
+g2 <- ggplot(data=df, mapping = aes(x=Maria, y=Nerea, color = abs(Maria-Nerea)<2)) + 
+  geom_point()
+g2 + geom_smooth()
+
+g3 <- ggplot(data=df, mapping = aes(x=Chris, y=Jim, color = abs(Chris-Jim)<2)) + 
+  geom_point()
+g3 + geom_smooth()
+
+grid.arrange(g1,g2,g3, ncol = 1, nrow = 3)
+
+```
+
+With this analysis we can conclude that Jim and Chris (cor: 0.8255) has a very similar taste for movies and their corelation is higher than the other pairs considered on this analysis (Victoria-Nuria and Nera-Maria).
+All of their 6 movies are within 1 value of difference while Maria and Nerea has 5 out of 9 (slightly above 50% of matches). Victoria and Nuria matched (with 1 degree of difference) 5 out of 7 (cor:0.365).
+If we draw a line on the graphs we see a clear positive trend explaining this relation only on the third pair (Chris & Jim). While in the case of Maria and Nerea, the trend is negative (cor:-0.3)
+To finalize, we need to consider that the pair Jim and Chris has the lower number of movies shared, just 6 vs 7 and 9 of the other pairs.
+
+# 3) Top Recommendations for Victoria (weighted average)
+
+User based collaborative filtering using weighted average based on the corelation between users.
+
+```{r fig.width=7, fig.height=6}
+
+#aim: consider critics more similar to Victoria to weight their vote on specific movies.
+
+victoria_notseen <- df[is.na(df$Victoria),-15] # keep just other users rate of those movies that victoria has not seen.
+
+rating_avg_value <- mean(df[!is.na(df$Victoria),15]) # avg vote of victoria (3.15)
+
+rating_users_mean <- colMeans(df[,-15], na.rm=T) # avg vote of all participants vector L19
+
+weighted_users <- cor(df, use = 'pairwise.complete.obs', method = 'pearson')[,15] 
+weighted_users <- weighted_users[-15] # users weight - corelation with Victoria - vector L19
+
+weighted_users_abs <- sum(abs(weighted_users)) # sum of the weights - denominator (6.92). We use abs to keep the negative values under control
+
+victoria_colfilt <- victoria_notseen # we create a dataframe called victoria collaborative filtering rec engine that will have the same size as victoria_notseen.
+
+for(i in 1:7){
+  for(j in 1:19){
+    victoria_colfilt[i,j] <- (victoria_notseen[i,j]-rating_users_mean[j])*weighted_users[j]
+  }
+} # with this formula, we calculate the scale rating multiplied by the weight of each user.
+
+v_cf_mean <- rating_avg_value + rowSums(victoria_colfilt, na.rm=T)/weighted_users_abs # complete formula
+v_cf_mean <- sort(v_cf_mean, decreasing = T)[1:5] # we filter the top5 with highest score.
+v_cf_mean <- as.data.frame(v_cf_mean)
+v_cf_mean
+```
+
+
+# 4) Top similar critics
+Return the top 5 critics that are most similar to Victoria. 
+
+One of the aims of any collaborative filtering is to identify those users that have similar taste: NEIGHBOURS. For this, we will use the Pearson correlation. This methodology analyze how well two sets of independent data fit to a straight line. In case of having many neighbours, we will just keep the more similar ones.
+Exercise number 4 is a fundamental part on building an user-based CF.
+
+```{r fig.width=7, fig.height=6}
+cor <- cor(df, use = 'pairwise.complete.obs', method = 'pearson')
+cor_victoria <- cor[,15]
+cor_victoria <- sort(cor_victoria, decreasing = TRUE)
+top_5_cor_victoria <- cor_victoria[2:6]
+top_5_cor_victoria <- as.data.frame(top_5_cor_victoria)
+top_5_cor_victoria
+```
